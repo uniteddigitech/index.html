@@ -1,0 +1,2457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ludo Master - Custom Chat & Emoji Sound FX</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --red: #ef4444;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 10px;
+    }
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      max-width: 600px;
+      width: 100%;
+    }
+    .top-bar {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
+    }
+    .badge-group { display: flex; gap: 8px; align-items: center; }
+    .mode-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #94a3b8;
+      background: #334155;
+      padding: 5px 12px;
+      border-radius: 999px;
+    }
+    .room-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: none;
+    }
+    .btn-new {
+      background: #334155;
+      color: #f8fafc;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+    .btn-new:hover { background: #475569; }
+    .hud {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 10px 18px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+    }
+    .turn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+    .turn-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 10px currentColor;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .status-msg {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      text-align: right;
+      max-width: 145px;
+      line-height: 1.25;
+    }
+
+    /* 3D Dice */
+    .dice-wrapper {
+      position: relative;
+      width: 68px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 600px;
+    }
+    .timer-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      transform: rotate(-90deg);
+    }
+    .timer-circle-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 4;
+    }
+    .timer-circle-fg {
+      fill: none;
+      stroke: var(--red);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 188.495;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.08s linear, stroke 0.3s ease;
+    }
+
+    .dice-scene {
+      width: 46px;
+      height: 46px;
+      position: relative;
+      transform-style: preserve-3d;
+      cursor: pointer;
+    }
+    .dice-cube {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      transform-style: preserve-3d;
+      transition: transform 0.65s cubic-bezier(0.18, 0.9, 0.3, 1.15);
+    }
+    .dice-cube.rolling {
+      animation: diceRollPhysics 0.65s linear infinite;
+    }
+    @keyframes diceRollPhysics {
+      0% { transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+      50% { transform: scale(1.2) translateY(-10px) rotateX(360deg) rotateY(180deg) rotateZ(180deg); }
+      100% { transform: scale(1) translateY(0) rotateX(720deg) rotateY(360deg) rotateZ(360deg); }
+    }
+
+    .dice-face {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      background: #ffffff;
+      border: 1px solid #94a3b8;
+      border-radius: 8px;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.2), 0 3px 6px rgba(0,0,0,0.35);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      padding: 5px;
+      box-sizing: border-box;
+    }
+
+    .pip {
+      display: block;
+      width: 8px;
+      height: 8px;
+      background: #0f172a;
+      border-radius: 50%;
+      align-self: center;
+      justify-self: center;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .face-1 .pip:nth-child(1) { grid-row: 2; grid-column: 2; background: #ef4444; width: 10px; height: 10px; }
+    .face-2 .pip:nth-child(1) { grid-row: 1; grid-column: 1; }
+    .face-2 .pip:nth-child(2) { grid-row: 3; grid-column: 3; }
+    .face-3 .pip:nth-child(1) { grid-row: 1; grid-column: 1; }
+    .face-3 .pip:nth-child(2) { grid-row: 2; grid-column: 2; }
+    .face-3 .pip:nth-child(3) { grid-row: 3; grid-column: 3; }
+    .face-4 .pip:nth-child(1) { grid-row: 1; grid-column: 1; }
+    .face-4 .pip:nth-child(2) { grid-row: 1; grid-column: 3; }
+    .face-4 .pip:nth-child(3) { grid-row: 3; grid-column: 1; }
+    .face-4 .pip:nth-child(4) { grid-row: 3; grid-column: 3; }
+    .face-5 .pip:nth-child(1) { grid-row: 1; grid-column: 1; }
+    .face-5 .pip:nth-child(2) { grid-row: 1; grid-column: 3; }
+    .face-5 .pip:nth-child(3) { grid-row: 2; grid-column: 2; }
+    .face-5 .pip:nth-child(4) { grid-row: 3; grid-column: 1; }
+    .face-5 .pip:nth-child(5) { grid-row: 3; grid-column: 3; }
+    .face-6 .pip:nth-child(1) { grid-row: 1; grid-column: 1; }
+    .face-6 .pip:nth-child(2) { grid-row: 2; grid-column: 1; }
+    .face-6 .pip:nth-child(3) { grid-row: 3; grid-column: 1; }
+    .face-6 .pip:nth-child(4) { grid-row: 1; grid-column: 3; }
+    .face-6 .pip:nth-child(5) { grid-row: 2; grid-column: 3; }
+    .face-6 .pip:nth-child(6) { grid-row: 3; grid-column: 3; }
+
+    .face-1 { transform: rotateY(0deg) translateZ(23px); }
+    .face-2 { transform: rotateY(90deg) translateZ(23px); }
+    .face-3 { transform: rotateX(-90deg) translateZ(23px); }
+    .face-4 { transform: rotateX(90deg) translateZ(23px); }
+    .face-5 { transform: rotateY(-90deg) translateZ(23px); }
+    .face-6 { transform: rotateY(180deg) translateZ(23px); }
+
+    .board-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.6);
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Floating Reactions & Chat Container */
+    .reaction-overlay-container {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 20;
+    }
+    .floating-emoji {
+      position: absolute;
+      bottom: 20px;
+      font-size: 2.2rem;
+      animation: floatUp 2.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+    }
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translateY(0) scale(0.6); }
+      15% { opacity: 1; transform: translateY(-40px) scale(1.2); }
+      80% { opacity: 0.9; }
+      100% { opacity: 0; transform: translateY(-380px) scale(1.4); }
+    }
+    .chat-bubble-popup {
+      position: absolute;
+      background: rgba(15, 23, 42, 0.95);
+      border: 2px solid #38bdf8;
+      border-radius: 12px;
+      padding: 8px 14px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      max-width: 80%;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+      animation: chatPop 3.4s ease forwards;
+      word-break: break-word;
+    }
+    @keyframes chatPop {
+      0% { opacity: 0; transform: translateY(12px) scale(0.85); }
+      12% { opacity: 1; transform: translateY(0) scale(1); }
+      85% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-20px) scale(0.9); }
+    }
+
+    /* Reaction & Chat Toolbar */
+    .reaction-bar {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 8px 14px;
+      border-radius: 12px;
+      gap: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+    }
+    .emoji-tray {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    .btn-reaction {
+      background: #334155;
+      border: none;
+      font-size: 1.25rem;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.12s, background 0.12s;
+    }
+    .btn-reaction:hover {
+      background: #475569;
+      transform: scale(1.15);
+    }
+    .btn-chat-toggle {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* Quick Chat & Custom Chat Drawer */
+    .quick-chat-modal {
+      position: absolute;
+      bottom: 60px;
+      right: 14px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 50;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      width: 250px;
+    }
+    .quick-chat-modal.hidden { display: none; }
+    .chat-options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .chat-option-btn {
+      background: #0f172a;
+      color: #cbd5e1;
+      border: none;
+      padding: 8px 10px;
+      border-radius: 6px;
+      text-align: left;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-option-btn:hover { background: #334155; color: #fff; }
+    
+    .custom-chat-form {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      padding-top: 6px;
+      border-top: 1px solid #334155;
+    }
+    .chat-input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #fff;
+      font-size: 0.85rem;
+      outline: none;
+      user-select: text;
+    }
+    .chat-input:focus { border-color: #38bdf8; }
+    .btn-send-chat {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 22px;
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+    }
+    .modal-card h2 { font-size: 1.3rem; text-align: center; }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 6px; font-weight: 700; }
+    .btn-group { display: flex; gap: 8px; }
+    .toggle-btn {
+      flex: 1;
+      padding: 9px;
+      background: #334155;
+      color: #cbd5e1;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .toggle-btn.active {
+      background: #2563eb;
+      color: #fff;
+      border-color: #60a5fa;
+    }
+    .color-swatch-group { display: flex; gap: 10px; justify-content: center; margin: 4px 0; }
+    .color-swatch {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 3px solid transparent;
+      transition: transform 0.15s;
+    }
+    .color-swatch.active {
+      border-color: #ffffff;
+      transform: scale(1.15);
+      box-shadow: 0 0 10px currentColor;
+    }
+    .input-box {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: #f8fafc;
+      font-size: 0.95rem;
+      outline: none;
+      font-weight: 600;
+      user-select: text;
+    }
+    .input-numeric {
+      text-transform: uppercase;
+      font-weight: 800;
+      letter-spacing: 4px;
+      text-align: center;
+      font-size: 1.15rem;
+    }
+    .room-display {
+      background: #0f172a;
+      border: 1px dashed #38bdf8;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      font-size: 1.3rem;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: #38bdf8;
+      cursor: pointer;
+    }
+    .btn-start {
+      margin-top: 6px;
+      padding: 12px;
+      background: #22c55e;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #15803d;
+      transition: transform 0.1s;
+    }
+    .btn-start:disabled { background: #475569; box-shadow: none; cursor: not-allowed; opacity: 0.7; }
+    .btn-start:active:not(:disabled) { transform: translateY(3px); }
+    .btn-secondary {
+      background: #334155;
+      color: #cbd5e1;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .lobby-slots {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .lobby-slot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+    }
+    .lobby-slot.empty {
+      border: 1px dashed #475569;
+      color: #64748b;
+      justify-content: center;
+      font-style: italic;
+    }
+    .lobby-player-info { display: flex; align-items: center; gap: 12px; font-weight: 600; }
+    .lobby-dot { width: 16px; height: 16px; border-radius: 50%; }
+    .lobby-tag { font-size: 0.75rem; background: #334155; padding: 2px 8px; border-radius: 4px; color: #94a3b8; }
+
+    .podium-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+    .podium-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .podium-rank { font-size: 1.2rem; font-weight: 800; width: 32px; }
+    .rank-1 { color: #eab308; }
+    .rank-2 { color: #94a3b8; }
+    .rank-3 { color: #b45309; }
+    .rank-4 { color: #64748b; }
+  </style>
+</head>
+<body>
+
+<div class="game-container">
+  <div class="top-bar">
+    <div class="badge-group">
+      <span class="mode-badge" id="modeBadge">Vs Bots (4P)</span>
+      <span class="room-badge" id="roomBadge" title="Click to copy room code">ROOM: <strong id="roomCodeText">------</strong></span>
+    </div>
+    <button class="btn-new" id="btnOpenSetup">Lobby Setup</button>
+  </div>
+
+  <div class="hud">
+    <div class="turn-indicator">
+      <div class="turn-dot" id="turnDot"></div>
+      <span id="turnText">Red's Turn</span>
+    </div>
+    <div class="controls">
+      <div class="status-msg" id="statusMsg">Roll the dice</div>
+      <div class="dice-wrapper">
+        <svg class="timer-svg" viewBox="0 0 68 68">
+          <circle class="timer-circle-bg" cx="34" cy="34" r="30" />
+          <circle id="timerProgress" class="timer-circle-fg" cx="34" cy="34" r="30" />
+        </svg>
+        <div class="dice-scene" id="diceScene">
+          <div class="dice-cube" id="diceCube">
+            <div class="dice-face face-1"><span class="pip"></span></div>
+            <div class="dice-face face-2"><span class="pip"></span><span class="pip"></span></div>
+            <div class="dice-face face-3"><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+            <div class="dice-face face-4"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+            <div class="dice-face face-5"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+            <div class="dice-face face-6"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="board-wrapper" style="position: relative;">
+    <canvas id="gameCanvas" width="900" height="900"></canvas>
+    <div class="reaction-overlay-container" id="reactionOverlay"></div>
+  </div>
+
+  <!-- Interactive Reactions & Quick/Custom Chat -->
+  <div class="reaction-bar" style="position: relative;">
+    <div class="emoji-tray">
+      <button class="btn-reaction" data-emoji="🔥">🔥</button>
+      <button class="btn-reaction" data-emoji="😂">😂</button>
+      <button class="btn-reaction" data-emoji="👏">👏</button>
+      <button class="btn-reaction" data-emoji="😭">😭</button>
+      <button class="btn-reaction" data-emoji="🎲">🎲</button>
+      <button class="btn-reaction" data-emoji="❤️">❤️</button>
+    </div>
+    <button class="btn-chat-toggle" id="btnChatToggle">💬 Chat</button>
+
+    <div class="quick-chat-modal hidden" id="quickChatModal">
+      <div class="chat-options-list">
+        <button class="chat-option-btn" data-msg="Good luck! 👍">Good luck! 👍</button>
+        <button class="chat-option-btn" data-msg="Well played! 👏">Well played! 👏</button>
+        <button class="chat-option-btn" data-msg="Hurry up! ⏳">Hurry up! ⏳</button>
+        <button class="chat-option-btn" data-msg="Oops! 😅">Oops! 😅</button>
+        <button class="chat-option-btn" data-msg="Roll a 6 please! 🎲">Roll a 6 please! 🎲</button>
+        <button class="chat-option-btn" data-msg="Nice move! 🔥">Nice move! 🔥</button>
+      </div>
+      <form class="custom-chat-form" id="customChatForm">
+        <input type="text" class="chat-input" id="customChatInput" placeholder="Type message..." maxlength="30" autocomplete="off">
+        <button type="submit" class="btn-send-chat">Send</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Setup Modal -->
+<div class="modal-overlay" id="setupModal">
+  <div class="modal-card">
+    <h2>Game Setup</h2>
+
+    <div>
+      <div class="section-title">Your Player Name</div>
+      <input type="text" id="playerNameInput" class="input-box" maxlength="12" value="Player 1">
+    </div>
+
+    <div>
+      <div class="section-title">Your Preferred Color</div>
+      <div class="color-swatch-group">
+        <div class="color-swatch active" data-color="RED" style="background: var(--red);"></div>
+        <div class="color-swatch" data-color="GREEN" style="background: var(--green);"></div>
+        <div class="color-swatch" data-color="YELLOW" style="background: var(--yellow);"></div>
+        <div class="color-swatch" data-color="BLUE" style="background: var(--blue);"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Game Mode</div>
+      <div class="btn-group">
+        <button class="toggle-btn active" id="modeBots">Vs Bots</button>
+        <button class="toggle-btn" id="modePassPlay">Pass & Play</button>
+        <button class="toggle-btn" id="modeOnline">Online Room</button>
+      </div>
+    </div>
+
+    <div id="playerCountSection">
+      <div class="section-title">Player Count (Bots / Local)</div>
+      <div class="btn-group">
+        <button class="toggle-btn" data-count="2">2 Players</button>
+        <button class="toggle-btn" data-count="3">3 Players</button>
+        <button class="toggle-btn active" data-count="4">4 Players</button>
+      </div>
+    </div>
+
+    <div id="onlineSection" style="display: none; flex-direction: column; gap: 10px;">
+      <div class="btn-group">
+        <button class="toggle-btn active" id="btnSubCreate">Create Room</button>
+        <button class="toggle-btn" id="btnSubJoin">Join Room</button>
+      </div>
+
+      <div id="createSubView">
+        <div class="section-title">6-Digit Room Code</div>
+        <div class="room-display" id="generatedCodeDisplay" title="Click to copy">Generating...</div>
+      </div>
+
+      <div id="joinSubView" style="display: none;">
+        <div class="section-title">Enter 6-Digit Room Code</div>
+        <input type="text" id="joinCodeInput" class="input-box input-numeric" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000">
+        <div style="font-size: 0.8rem; color: #ef4444; margin-top: 4px;" id="joinErrorHelper"></div>
+      </div>
+    </div>
+
+    <button class="btn-start" id="btnStartGame">Launch Match</button>
+  </div>
+</div>
+
+<!-- Waiting Lobby Modal -->
+<div class="modal-overlay hidden" id="waitingLobbyModal">
+  <div class="modal-card">
+    <h2>Online Waiting Lobby</h2>
+    <div style="text-align: center; font-size: 0.85rem; color: #94a3b8;">
+      Room Code: <strong id="lobbyRoomCode" style="color: #38bdf8; letter-spacing: 2px; font-size: 1.1rem;">------</strong>
+    </div>
+    <div class="lobby-slots" id="lobbySlots"></div>
+    <div style="font-size: 0.85rem; text-align: center; color: #cbd5e1; min-height: 20px;" id="lobbyStatusText">Waiting for friend to connect...</div>
+    <button class="btn-start" id="btnLobbyStart" disabled>Start Match</button>
+    <button class="btn-secondary" id="btnLeaveLobby">Leave Room</button>
+  </div>
+</div>
+
+<!-- Rejoin Request Modal -->
+<div class="modal-overlay hidden" id="rejoinRequestModal">
+  <div class="modal-card">
+    <h2>Rejoin Request</h2>
+    <p style="text-align: center; color: #cbd5e1; font-size: 0.95rem;">
+      <strong id="rejoiningPlayerName" style="color: #38bdf8;">Friend</strong> wants to rejoin the ongoing match.
+    </p>
+    <div class="btn-group" style="margin-top: 10px;">
+      <button class="btn-start" id="btnAcceptRejoin" style="flex: 1; margin: 0;">Accept</button>
+      <button class="btn-secondary" id="btnRejectRejoin" style="flex: 1;">Decline</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rejoining Waiting Modal -->
+<div class="modal-overlay hidden" id="rejoiningStatusModal">
+  <div class="modal-card" style="text-align: center;">
+    <h2>Rejoining Match...</h2>
+    <p style="color: #94a3b8; font-size: 0.9rem;" id="rejoinStatusMsg">Waiting for host permission to re-enter room...</p>
+    <button class="btn-secondary" id="btnCancelRejoin" style="margin-top: 10px;">Cancel</button>
+  </div>
+</div>
+
+<!-- Scoreboard Modal -->
+<div class="modal-overlay hidden" id="scoreboardModal">
+  <div class="modal-card">
+    <h2>🏆 Final Standings 🏆</h2>
+    <div class="podium-list" id="podiumList"></div>
+    <button class="btn-start" id="btnPlayAgain">Play Again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // --- Web Audio Synthesis & Custom SFX ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function ensureAudio() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  const sfx = {
+    diceRoll() {
+      ensureAudio();
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(260 + Math.random() * 320, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.045);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.045);
+        }, i * 65);
+      }
+      setTimeout(() => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(110, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.24, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.09);
+      }, 380);
+    },
+
+    birth() {
+      ensureAudio();
+      [523.25, 783.99].forEach((f, i) => {
+        setTimeout(() => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.18);
+        }, i * 90);
+      });
+    },
+
+    kill() {
+      ensureAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.35);
+    },
+
+    star() {
+      ensureAudio();
+      [659.25, 830.61, 987.77].forEach(f => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      });
+    },
+
+    home() {
+      ensureAudio();
+      [440, 554.37, 659.25, 880].forEach((f, idx) => {
+        setTimeout(() => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.25);
+        }, idx * 75);
+      });
+    },
+
+    chatChime() {
+      ensureAudio();
+      [600, 900].forEach((f, i) => {
+        setTimeout(() => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.12);
+        }, i * 60);
+      });
+    },
+
+    // Individual emoji sound effects
+    emoji(type) {
+      ensureAudio();
+      const t = audioCtx.currentTime;
+      if (type === '🔥') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(450, t);
+        osc.frequency.exponentialRampToValueAtTime(140, t + 0.22);
+        gain.gain.setValueAtTime(0.18, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(t + 0.22);
+      } else if (type === '😂') {
+        [500, 700, 600, 800].forEach((f, i) => {
+          setTimeout(() => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+          }, i * 45);
+        });
+      } else if (type === '👏') {
+        for (let i = 0; i < 3; i++) {
+          setTimeout(() => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(180 + Math.random() * 80, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.04);
+          }, i * 65);
+        }
+      } else if (type === '😭') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(650, t);
+        osc.frequency.exponentialRampToValueAtTime(250, t + 0.35);
+        gain.gain.setValueAtTime(0.18, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(t + 0.35);
+      } else if (type === '🎲') {
+        sfx.diceRoll();
+      } else if (type === '❤️') {
+        [440, 659.25].forEach((f, i) => {
+          setTimeout(() => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.16, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+          }, i * 70);
+        });
+      }
+    },
+
+    stepHop() {
+      ensureAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(360, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.04);
+    }
+  };
+
+  // --- Coordinates & Board Geometry ---
+  const COMMON_TRACK = [
+    {x:1,y:6},{x:2,y:6},{x:3,y:6},{x:4,y:6},{x:5,y:6},
+    {x:6,y:5},{x:6,y:4},{x:6,y:3},{x:6,y:2},{x:6,y:1},{x:6,y:0},
+    {x:7,y:0},{x:8,y:0},
+    {x:8,y:1},{x:8,y:2},{x:8,y:3},{x:8,y:4},{x:8,y:5},
+    {x:9,y:6},{x:10,y:6},{x:11,y:6},{x:12,y:6},{x:13,y:6},{x:14,y:6},
+    {x:14,y:7},{x:14,y:8},
+    {x:13,y:8},{x:12,y:8},{x:11,y:8},{x:10,y:8},{x:9,y:8},
+    {x:8,y:9},{x:8,y:10},{x:8,y:11},{x:8,y:12},{x:8,y:13},{x:8,y:14},
+    {x:7,y:14},{x:6,y:14},
+    {x:6,y:13},{x:6,y:12},{x:6,y:11},{x:6,y:10},{x:6,y:9},
+    {x:5,y:8},{x:4,y:8},{x:3,y:8},{x:2,y:8},{x:1,y:8},{x:0,y:8},
+    {x:0,y:7},{x:0,y:6}
+  ];
+
+  const COLOR_CONFIG = {
+    RED:    { hex: '#ef4444', offset: 0,  baseSlots: [{x:1.5,y:1.5},{x:3.5,y:1.5},{x:1.5,y:3.5},{x:3.5,y:3.5}], homeStretch: [{x:1,y:7},{x:2,y:7},{x:3,y:7},{x:4,y:7},{x:5,y:7},{x:6,y:7}] },
+    GREEN:  { hex: '#22c55e', offset: 13, baseSlots: [{x:10.5,y:1.5},{x:12.5,y:1.5},{x:10.5,y:3.5},{x:12.5,y:3.5}], homeStretch: [{x:7,y:1},{x:7,y:2},{x:7,y:3},{x:7,y:4},{x:7,y:5},{x:7,y:6}] },
+    YELLOW: { hex: '#eab308', offset: 26, baseSlots: [{x:10.5,y:10.5},{x:12.5,y:10.5},{x:10.5,y:12.5},{x:12.5,y:12.5}], homeStretch: [{x:13,y:7},{x:12,y:7},{x:11,y:7},{x:10,y:7},{x:9,y:7},{x:8,y:7}] },
+    BLUE:   { hex: '#3b82f6', offset: 39, baseSlots: [{x:1.5,y:10.5},{x:3.5,y:10.5},{x:1.5,y:12.5},{x:3.5,y:12.5}], homeStretch: [{x:7,y:13},{x:7,y:12},{x:7,y:11},{x:7,y:10},{x:7,y:9},{x:7,y:8}] }
+  };
+
+  const FINAL_HOME_STEP = 56;
+
+  const SAFE_TILES = [
+    { x: 1,  y: 6,  trackIdx: 0,  fill: '#ffffff' },
+    { x: 8,  y: 1,  trackIdx: 13, fill: '#ffffff' },
+    { x: 13, y: 8,  trackIdx: 26, fill: '#ffffff' },
+    { x: 6,  y: 13, trackIdx: 39, fill: '#ffffff' },
+    { x: 6,  y: 2,  trackIdx: 8,  fill: '#475569' },
+    { x: 12, y: 6,  trackIdx: 21, fill: '#475569' },
+    { x: 8,  y: 12, trackIdx: 34, fill: '#475569' },
+    { x: 2,  y: 8,  trackIdx: 47, fill: '#475569' },
+  ];
+  const SAFE_TRACK_INDICES = new Set(SAFE_TILES.map(t => t.trackIdx));
+
+  const BOARD_SIZE = 900;
+  const CELL_SIZE = BOARD_SIZE / 15;
+  const TURN_TIMEOUT_SECONDS = 14;
+  const CIRCUMFERENCE = 2 * Math.PI * 30;
+
+  // --- Confetti Engine ---
+  const confetti = {
+    particles: [],
+    colors: ['#ef4444', '#22c55e', '#eab308', '#3b82f6', '#ec4899', '#a855f7'],
+
+    burst(originX, originY, count = 120, upwardBias = 5) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 4 + Math.random() * 12;
+        this.particles.push({
+          x: originX,
+          y: originY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - (2 + Math.random() * upwardBias),
+          size: 6 + Math.random() * 6,
+          color: this.colors[Math.floor(Math.random() * this.colors.length)],
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.25,
+          gravity: 0.22,
+          drag: 0.985,
+          wobble: Math.random() * Math.PI,
+          wobbleSpeed: 0.08 + Math.random() * 0.05,
+          alpha: 1,
+          decay: 0.005 + Math.random() * 0.006,
+        });
+      }
+    },
+
+    update() {
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const p = this.particles[i];
+        p.vx *= p.drag;
+        p.vy = p.vy * p.drag + p.gravity;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rotation += p.rotationSpeed;
+        p.wobble += p.wobbleSpeed;
+        p.alpha -= p.decay;
+        if (p.alpha <= 0 || p.y > BOARD_SIZE + 50) {
+          this.particles.splice(i, 1);
+        }
+      }
+    },
+
+    draw(ctx) {
+      if (!this.particles.length) return;
+      ctx.save();
+      for (const p of this.particles) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.scale(Math.cos(p.wobble), 1);
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+  };
+
+  // --- Networking, Rejoin & Live Reactions ---
+  let peer = null;
+  let connection = null;
+  let onlineRoomCode = null;
+  let isHost = false;
+  let myCustomName = "Player 1";
+  let myCustomColor = "RED";
+  let isGameActive = false;
+
+  let lobbyPlayers = [];
+  let pendingRejoinData = null;
+
+  function generateNumericCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  function initPeer(customId, onReady) {
+    if (peer) peer.destroy();
+    peer = new Peer(customId, {
+      debug: 1,
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+
+    peer.on('open', id => {
+      if (onReady) onReady(id);
+    });
+
+    peer.on('connection', conn => {
+      connection = conn;
+      setupConnListeners(conn);
+    });
+
+    peer.on('error', err => {
+      console.error('Peer error:', err);
+      joinErrorHelper.innerText = 'Failed to connect. Check 6-digit code.';
+      rejoinStatusMsg.innerText = 'Unable to reach room host.';
+    });
+  }
+
+  function setupConnListeners(conn) {
+    conn.on('open', () => {
+      if (waitingLobbyModal.classList.contains('hidden') && isGameActive && !isHost) {
+        conn.send({
+          type: 'REQUEST_REJOIN',
+          player: { name: myCustomName, color: myCustomColor }
+        });
+      } else if (!isHost && !isGameActive) {
+        conn.send({
+          type: 'JOIN_LOBBY',
+          player: { name: myCustomName, color: myCustomColor, isHost: false }
+        });
+      }
+    });
+
+    conn.on('data', data => {
+      handleRemoteAction(data);
+    });
+
+    conn.on('close', () => {
+      handlePeerDisconnection();
+    });
+  }
+
+  function handlePeerDisconnection() {
+    statusMsg.innerText = 'Opponent disconnected.';
+
+    if (!isHost && isGameActive) {
+      isHost = true;
+      statusMsg.innerText = 'Host left! You are now the host.';
+      initPeer(`ludo-numeric-${onlineRoomCode}`, () => {
+        console.log('Migrated host registered on peer server');
+      });
+    }
+
+    if (!waitingLobbyModal.classList.contains('hidden')) {
+      lobbyPlayers = lobbyPlayers.filter(p => p.isHost);
+      renderLobbyUI();
+    }
+  }
+
+  function broadcastAction(action) {
+    if (selectedMode === 'ONLINE' && connection && connection.open) {
+      connection.send(action);
+    }
+  }
+
+  function handleRemoteAction(data) {
+    if (data.type === 'JOIN_LOBBY' && isHost) {
+      lobbyPlayers = [lobbyPlayers[0], data.player];
+      renderLobbyUI();
+      sfx.star();
+
+      broadcastAction({
+        type: 'LOBBY_STATE',
+        players: lobbyPlayers
+      });
+    } else if (data.type === 'LOBBY_STATE' && !isHost) {
+      lobbyPlayers = data.players;
+      renderLobbyUI();
+      sfx.star();
+    } else if (data.type === 'START_MATCH') {
+      waitingLobbyModal.classList.add('hidden');
+      isGameActive = true;
+      initMatch();
+    } else if (data.type === 'REQUEST_REJOIN' && isHost) {
+      pendingRejoinData = data.player;
+      document.getElementById('rejoiningPlayerName').innerText = data.player.name;
+      document.getElementById('rejoinRequestModal').classList.remove('hidden');
+      sfx.star();
+    } else if (data.type === 'REJOIN_ACCEPTED') {
+      document.getElementById('rejoiningStatusModal').classList.add('hidden');
+      setupModal.classList.add('hidden');
+      isGameActive = true;
+      applyFullStateSnapshot(data.gameState);
+      statusMsg.innerText = 'Rejoined ongoing match!';
+      sfx.star();
+    } else if (data.type === 'REJOIN_REJECTED') {
+      document.getElementById('rejoinStatusMsg').innerText = 'Host declined your rejoin request.';
+    } else if (data.type === 'ROLL') {
+      triggerDiceAnimation(data.roll, () => applyDiceRoll(data.roll));
+    } else if (data.type === 'MOVE') {
+      applyTokenMove(data.tokenId);
+    } else if (data.type === 'EMOJI_REACTION') {
+      displayFloatingEmoji(data.emoji);
+      sfx.emoji(data.emoji);
+    } else if (data.type === 'CHAT_MESSAGE') {
+      displayChatMessage(data.sender, data.text);
+      sfx.chatChime();
+    }
+  }
+
+  function createGameStateSnapshot() {
+    return {
+      activePlayerIndex: state.activePlayerIndex,
+      diceRoll: state.diceRoll,
+      phase: state.phase,
+      selectableTokenIds: state.selectableTokenIds,
+      finishedRankings: state.finishedRankings.map(p => p.name),
+      players: state.players.map(p => ({
+        color: p.color,
+        name: p.name,
+        isBot: p.isBot,
+        hasFinished: p.hasFinished,
+        tokens: p.tokens.map(t => ({ id: t.id, slot: t.slot, color: t.color, step: t.step }))
+      }))
+    };
+  }
+
+  function applyFullStateSnapshot(snapshot) {
+    state.activePlayerIndex = snapshot.activePlayerIndex;
+    state.diceRoll = snapshot.diceRoll;
+    state.phase = snapshot.phase;
+    state.selectableTokenIds = snapshot.selectableTokenIds;
+    state.players = snapshot.players;
+
+    modeBadge.innerText = `Online Room`;
+    roomBadge.style.display = 'inline-flex';
+    roomCodeText.innerText = onlineRoomCode;
+
+    if (snapshot.diceRoll) {
+      diceCube.style.transform = DICE_TRANSFORMS[snapshot.diceRoll];
+    }
+    updateUI();
+  }
+
+  // --- Visual Reactions & Chat Handlers ---
+  const reactionOverlay = document.getElementById('reactionOverlay');
+
+  function displayFloatingEmoji(emoji) {
+    const el = document.createElement('div');
+    el.className = 'floating-emoji';
+    el.innerText = emoji;
+
+    const randomLeft = 15 + Math.random() * 65;
+    el.style.left = `${randomLeft}%`;
+
+    reactionOverlay.appendChild(el);
+    setTimeout(() => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 2400);
+  }
+
+  function displayChatMessage(sender, text) {
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble-popup';
+    bubble.innerHTML = `<span style="color: #38bdf8; font-size: 0.8rem; display: block;">${sender}</span>${text}`;
+
+    bubble.style.bottom = '40px';
+    bubble.style.left = '50%';
+    bubble.style.transform = 'translateX(-50%)';
+
+    reactionOverlay.appendChild(bubble);
+    setTimeout(() => {
+      if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
+    }, 3400);
+  }
+
+  document.querySelectorAll('.btn-reaction').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const emoji = btn.dataset.emoji;
+      displayFloatingEmoji(emoji);
+      sfx.emoji(emoji);
+      broadcastAction({ type: 'EMOJI_REACTION', emoji });
+    });
+  });
+
+  const btnChatToggle = document.getElementById('btnChatToggle');
+  const quickChatModal = document.getElementById('quickChatModal');
+  const customChatForm = document.getElementById('customChatForm');
+  const customChatInput = document.getElementById('customChatInput');
+
+  btnChatToggle.addEventListener('click', e => {
+    e.stopPropagation();
+    quickChatModal.classList.toggle('hidden');
+    if (!quickChatModal.classList.contains('hidden')) {
+      customChatInput.focus();
+    }
+  });
+
+  document.querySelectorAll('.chat-option-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.dataset.msg;
+      displayChatMessage(myCustomName, text);
+      sfx.chatChime();
+      broadcastAction({ type: 'CHAT_MESSAGE', sender: myCustomName, text });
+      quickChatModal.classList.add('hidden');
+    });
+  });
+
+  customChatForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = customChatInput.value.trim();
+    if (!text) return;
+
+    displayChatMessage(myCustomName, text);
+    sfx.chatChime();
+    broadcastAction({ type: 'CHAT_MESSAGE', sender: myCustomName, text });
+    customChatInput.value = '';
+    quickChatModal.classList.add('hidden');
+  });
+
+  document.addEventListener('click', e => {
+    if (!quickChatModal.contains(e.target) && e.target !== btnChatToggle) {
+      quickChatModal.classList.add('hidden');
+    }
+  });
+
+  // --- ACCURATE 3D DICE ROTATIONS ---
+  const diceCube = document.getElementById('diceCube');
+  const DICE_TRANSFORMS = {
+    1: 'rotateY(0deg) rotateX(0deg)',
+    2: 'rotateY(-90deg) rotateX(0deg)',
+    3: 'rotateX(90deg) rotateY(0deg)',
+    4: 'rotateX(-90deg) rotateY(0deg)',
+    5: 'rotateY(90deg) rotateX(0deg)',
+    6: 'rotateY(180deg) rotateX(0deg)'
+  };
+
+  function triggerDiceAnimation(finalVal, onFinished) {
+    sfx.diceRoll();
+    diceCube.classList.add('rolling');
+
+    setTimeout(() => {
+      diceCube.classList.remove('rolling');
+      const extraX = 720;
+      const extraY = 720;
+      diceCube.style.transform = `${DICE_TRANSFORMS[finalVal]} rotateX(${extraX}deg) rotateY(${extraY}deg)`;
+      setTimeout(() => {
+        diceCube.style.transform = DICE_TRANSFORMS[finalVal];
+        if (onFinished) onFinished();
+      }, 200);
+    }, 480);
+  }
+
+  // --- Match Engine ---
+  let selectedMode = 'BOTS';
+  let activePlayerCount = 4;
+
+  const state = {
+    activePlayerIndex: 0,
+    diceRoll: null,
+    phase: 'ROLL',
+    players: [],
+    selectableTokenIds: [],
+    animatingToken: null,
+    finishedRankings: [],
+  };
+
+  function getOrderedColors(chosenColor, totalPlayers) {
+    const all = ['RED', 'GREEN', 'YELLOW', 'BLUE'];
+    if (totalPlayers === 2) {
+      if (chosenColor === 'RED') return ['RED', 'YELLOW'];
+      if (chosenColor === 'YELLOW') return ['YELLOW', 'RED'];
+      if (chosenColor === 'GREEN') return ['GREEN', 'BLUE'];
+      return ['BLUE', 'GREEN'];
+    }
+    const idx = all.indexOf(chosenColor);
+    const reordered = [];
+    for (let i = 0; i < totalPlayers; i++) {
+      reordered.push(all[(idx + i) % 4]);
+    }
+    return reordered;
+  }
+
+  function initMatch() {
+    turnTimer.stop();
+    confetti.particles = [];
+    state.finishedRankings = [];
+
+    if (selectedMode === 'BOTS') {
+      const colors = getOrderedColors(myCustomColor, activePlayerCount);
+      state.players = colors.map((color, idx) => ({
+        color,
+        name: idx === 0 ? myCustomName : `Bot (${color})`,
+        isBot: idx !== 0,
+        hasFinished: false,
+        tokens: [0, 1, 2, 3].map(id => ({ id: `${color}_${id}`, slot: id, color, step: -1 }))
+      }));
+      modeBadge.innerText = `Vs Bots (${activePlayerCount}P)`;
+      roomBadge.style.display = 'none';
+    } else if (selectedMode === 'PASS_PLAY') {
+      const colors = getOrderedColors(myCustomColor, activePlayerCount);
+      state.players = colors.map((color, idx) => ({
+        color,
+        name: idx === 0 ? myCustomName : `Player ${idx + 1} (${color})`,
+        isBot: false,
+        hasFinished: false,
+        tokens: [0, 1, 2, 3].map(id => ({ id: `${color}_${id}`, slot: id, color, step: -1 }))
+      }));
+      modeBadge.innerText = `Pass & Play (${activePlayerCount}P)`;
+      roomBadge.style.display = 'none';
+    } else if (selectedMode === 'ONLINE') {
+      let p1 = lobbyPlayers[0] || { name: 'Host', color: 'RED' };
+      let p2 = lobbyPlayers[1] || { name: 'Friend', color: 'YELLOW' };
+
+      if (p1.color === p2.color) {
+        const fallbacks = ['RED', 'YELLOW', 'GREEN', 'BLUE'].filter(c => c !== p1.color);
+        p2.color = fallbacks[0];
+      }
+
+      state.players = [
+        {
+          color: p1.color,
+          name: p1.name,
+          isBot: false,
+          hasFinished: false,
+          tokens: [0, 1, 2, 3].map(id => ({ id: `${p1.color}_${id}`, slot: id, color: p1.color, step: -1 }))
+        },
+        {
+          color: p2.color,
+          name: p2.name,
+          isBot: false,
+          hasFinished: false,
+          tokens: [0, 1, 2, 3].map(id => ({ id: `${p2.color}_${id}`, slot: id, color: p2.color, step: -1 }))
+        }
+      ];
+
+      modeBadge.innerText = `Online Room`;
+      roomBadge.style.display = 'inline-flex';
+      roomCodeText.innerText = onlineRoomCode;
+    }
+
+    state.activePlayerIndex = 0;
+    state.diceRoll = null;
+    state.phase = 'ROLL';
+    state.selectableTokenIds = [];
+    state.animatingToken = null;
+    diceCube.style.transform = DICE_TRANSFORMS[1];
+
+    updateUI();
+  }
+
+  function getTileKey(token) {
+    if (token.step === -1) return `BASE_${token.color}_${token.slot}`;
+    if (token.step >= 0 && token.step <= 50) {
+      const globalIdx = (token.step + COLOR_CONFIG[token.color].offset) % 52;
+      return `TRACK_${globalIdx}`;
+    }
+    if (token.step >= 51 && token.step <= 55) return `HOME_LANE_${token.color}_${token.step}`;
+    return `GOAL_${token.color}`;
+  }
+
+  function getGridCoordinate(color, step, slot) {
+    const conf = COLOR_CONFIG[color];
+    if (step === -1) return conf.baseSlots[slot];
+    if (step >= 0 && step <= 50) {
+      const idx = (step + conf.offset) % 52;
+      return COMMON_TRACK[idx];
+    }
+    const homeIdx = Math.min(Math.max(0, step - 51), 5);
+    return conf.homeStretch[homeIdx];
+  }
+
+  function getPixelCoordinate(token) {
+    const grid = getGridCoordinate(token.color, token.step, token.slot);
+    return {
+      x: (grid.x + 0.5) * CELL_SIZE,
+      y: (grid.y + 0.5) * CELL_SIZE
+    };
+  }
+
+  // --- Animation Engine ---
+  const animator = {
+    token: null,
+    path: [],
+    currentIdx: 0,
+    startTime: 0,
+    hopDuration: 130,
+    bounceHeight: 22,
+    isRewind: false,
+    onFinish: null,
+
+    start(token, targetStep, onFinish) {
+      this.token = token;
+      this.path = [];
+      this.isRewind = false;
+      this.onFinish = onFinish;
+      this.hopDuration = 130;
+
+      if (token.step === -1) {
+        this.path.push(getPixelCoordinate(token));
+        token.step = 0;
+        this.path.push(getPixelCoordinate(token));
+      } else {
+        for (let s = token.step; s <= targetStep; s++) {
+          this.path.push(getPixelCoordinate({ ...token, step: s }));
+        }
+      }
+      this.currentIdx = 0;
+      this.startTime = performance.now();
+      state.phase = 'ANIMATING';
+      state.animatingToken = token.id;
+    },
+
+    startRewind(token, fromStep, onFinish) {
+      this.token = token;
+      this.path = [];
+      this.isRewind = true;
+      this.onFinish = onFinish;
+      this.hopDuration = 55;
+
+      for (let s = fromStep; s >= 0; s--) {
+        this.path.push(getPixelCoordinate({ ...token, step: s }));
+      }
+      this.path.push(getPixelCoordinate({ ...token, step: -1 }));
+
+      this.currentIdx = 0;
+      this.startTime = performance.now();
+      state.phase = 'ANIMATING';
+      state.animatingToken = token.id;
+    },
+
+    update(now) {
+      if (!this.path.length || this.currentIdx >= this.path.length - 1) return null;
+
+      const elapsed = now - this.startTime;
+      const t = Math.min(elapsed / this.hopDuration, 1.0);
+      const from = this.path[this.currentIdx];
+      const to = this.path[this.currentIdx + 1];
+
+      const x = from.x + (to.x - from.x) * t;
+      const groundY = from.y + (to.y - from.y) * t;
+      const arc = 4 * this.bounceHeight * t * (1 - t);
+      const y = groundY - arc;
+
+      if (t >= 1.0) {
+        this.currentIdx++;
+        this.startTime = now;
+        sfx.stepHop();
+
+        if (this.currentIdx >= this.path.length - 1) {
+          const cb = this.onFinish;
+          this.path = [];
+          this.token = null;
+          state.animatingToken = null;
+          if (cb) cb();
+        }
+      }
+      return { x, y, arc };
+    }
+  };
+
+  // --- Turn Timer ---
+  const timerProgress = document.getElementById('timerProgress');
+  const turnTimer = {
+    durationMs: TURN_TIMEOUT_SECONDS * 1000,
+    startTime: null,
+    active: false,
+    rafId: null,
+
+    start() {
+      this.stop();
+      this.startTime = performance.now();
+      this.active = true;
+
+      const curPlayer = getActivePlayer();
+      timerProgress.style.stroke = COLOR_CONFIG[curPlayer.color].hex;
+      timerProgress.style.strokeDashoffset = '0';
+      this.tick();
+    },
+
+    tick() {
+      if (!this.active) return;
+      const now = performance.now();
+      const elapsed = now - this.startTime;
+      const remainingFraction = Math.max(0, 1 - (elapsed / this.durationMs));
+
+      timerProgress.style.strokeDashoffset = (CIRCUMFERENCE * (1 - remainingFraction)).toString();
+
+      if (remainingFraction < 0.25) {
+        timerProgress.style.stroke = '#ff3344';
+      }
+
+      if (remainingFraction <= 0) {
+        this.stop();
+        handleTurnTimeout();
+        return;
+      }
+      this.rafId = requestAnimationFrame(() => this.tick());
+    },
+
+    stop() {
+      this.active = false;
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+      timerProgress.style.strokeDashoffset = CIRCUMFERENCE.toString();
+    }
+  };
+
+  function isMyTurnOnline() {
+    if (selectedMode !== 'ONLINE') return true;
+    return getActivePlayer().name === myCustomName;
+  }
+
+  function handleTurnTimeout() {
+    if (!isMyTurnOnline()) return;
+
+    const activePlayer = getActivePlayer();
+    if (state.phase === 'ROLL') {
+      statusMsg.innerText = 'Turn timeout! Skipped.';
+      nextTurn();
+    } else if (state.phase === 'MOVE') {
+      if (state.selectableTokenIds.length > 0) {
+        const candidates = activePlayer.tokens.filter(t => state.selectableTokenIds.includes(t.id));
+        candidates.sort((a, b) => b.step - a.step);
+        selectToken(candidates[0].id);
+      } else {
+        nextTurn();
+      }
+    }
+  }
+
+  function getActivePlayer() {
+    return state.players[state.activePlayerIndex];
+  }
+
+  function getValidMoves(player, roll) {
+    return player.tokens.filter(t => {
+      if (t.step === FINAL_HOME_STEP) return false;
+      if (t.step === -1) return roll === 6;
+      return t.step + roll <= FINAL_HOME_STEP;
+    }).map(t => t.id);
+  }
+
+  function onDiceClick() {
+    if (state.phase !== 'ROLL' || !isMyTurnOnline()) return;
+    const roll = Math.floor(Math.random() * 6) + 1;
+    broadcastAction({ type: 'ROLL', roll });
+    triggerDiceAnimation(roll, () => applyDiceRoll(roll));
+  }
+
+  function applyDiceRoll(roll) {
+    turnTimer.stop();
+    state.diceRoll = roll;
+
+    const activePlayer = getActivePlayer();
+    const legalMoves = getValidMoves(activePlayer, roll);
+    state.selectableTokenIds = legalMoves;
+
+    if (legalMoves.length === 0) {
+      statusMsg.innerText = `Rolled ${roll}. No moves!`;
+      state.phase = 'ROLL';
+      setTimeout(nextTurn, 900);
+      return;
+    }
+
+    const movableTokens = activePlayer.tokens.filter(t => legalMoves.includes(t.id));
+    const isOnlyOneToken = movableTokens.length === 1;
+    const allMovableTokensInSamePlace = movableTokens.length > 1 && 
+      movableTokens.every(t => t.step === movableTokens[0].step);
+
+    if (isOnlyOneToken || allMovableTokensInSamePlace) {
+      statusMsg.innerText = `Rolled ${roll}. Auto-moving...`;
+      state.phase = 'MOVE';
+      setTimeout(() => selectToken(movableTokens[0].id), 400);
+    } else {
+      state.phase = 'MOVE';
+      statusMsg.innerText = `Rolled ${roll}. Select a token.`;
+      if (!activePlayer.isBot && isMyTurnOnline()) {
+        turnTimer.start();
+      } else if (activePlayer.isBot) {
+        setTimeout(botTacticalDecision, 600);
+      }
+    }
+  }
+
+  function selectToken(tokenId) {
+    if (state.phase !== 'MOVE' || !state.selectableTokenIds.includes(tokenId) || !isMyTurnOnline()) return;
+    broadcastAction({ type: 'MOVE', tokenId });
+    applyTokenMove(tokenId);
+  }
+
+  function applyTokenMove(tokenId) {
+    turnTimer.stop();
+    const activePlayer = getActivePlayer();
+    const token = activePlayer.tokens.find(t => t.id === tokenId);
+    const roll = state.diceRoll;
+    const targetStep = token.step === -1 ? 0 : token.step + roll;
+    const isBirth = token.step === -1 && targetStep === 0;
+
+    state.selectableTokenIds = [];
+    animator.start(token, targetStep, () => {
+      token.step = targetStep;
+      resolvePostMove(token, isBirth);
+    });
+  }
+
+  function resolvePostMove(token, isBirth) {
+    let capturedTokens = [];
+    const isHome = token.step === FINAL_HOME_STEP;
+
+    if (isBirth) {
+      sfx.birth();
+    }
+
+    if (token.step >= 0 && token.step <= 50) {
+      const myTrackIdx = (token.step + COLOR_CONFIG[token.color].offset) % 52;
+      const isStar = SAFE_TRACK_INDICES.has(myTrackIdx);
+
+      if (isStar) {
+        sfx.star();
+      } else {
+        state.players.forEach(p => {
+          if (p.color === token.color) return;
+          p.tokens.forEach(opp => {
+            if (opp.step >= 0 && opp.step <= 50) {
+              const oppTrackIdx = (opp.step + COLOR_CONFIG[opp.color].offset) % 52;
+              if (oppTrackIdx === myTrackIdx) {
+                capturedTokens.push({ opp, fromStep: opp.step });
+              }
+            }
+          });
+        });
+      }
+    }
+
+    if (isHome) {
+      sfx.home();
+      const pos = getPixelCoordinate(token);
+      confetti.burst(pos.x, pos.y, 65, 8);
+    }
+
+    if (capturedTokens.length > 0) {
+      sfx.kill();
+      const victim = capturedTokens[0];
+      animator.startRewind(victim.opp, victim.fromStep, () => {
+        victim.opp.step = -1;
+        finishTurnPostMove(token, isBirth, true, isHome);
+      });
+    } else {
+      finishTurnPostMove(token, isBirth, false, isHome);
+    }
+  }
+
+  function finishTurnPostMove(token, isBirth, captured, isHome) {
+    const curPlayer = getActivePlayer();
+    if (curPlayer.tokens.every(t => t.step === FINAL_HOME_STEP) && !curPlayer.hasFinished) {
+      curPlayer.hasFinished = true;
+      state.finishedRankings.push(curPlayer);
+      confetti.burst(BOARD_SIZE / 2, BOARD_SIZE / 2, 130, 9);
+      statusMsg.innerText = `${curPlayer.name} FINISHED!`;
+    }
+
+    const activeRemaining = state.players.filter(p => !p.hasFinished);
+    if (activeRemaining.length <= 1) {
+      if (activeRemaining.length === 1) {
+        state.finishedRankings.push(activeRemaining[0]);
+      }
+      showFinalScoreboard();
+      return;
+    }
+
+    const earnedBonus = state.diceRoll === 6 || isBirth || captured || isHome;
+    if (earnedBonus && !curPlayer.hasFinished) {
+      statusMsg.innerText = 'Bonus roll awarded!';
+      state.phase = 'ROLL';
+      updateUI();
+      if (curPlayer.isBot) setTimeout(onDiceClick, 750);
+    } else {
+      nextTurn();
+    }
+  }
+
+  function nextTurn() {
+    turnTimer.stop();
+    let nextIdx = state.activePlayerIndex;
+    let attempts = 0;
+    do {
+      nextIdx = (nextIdx + 1) % state.players.length;
+      attempts++;
+    } while (state.players[nextIdx].hasFinished && attempts <= state.players.length);
+
+    state.activePlayerIndex = nextIdx;
+    state.phase = 'ROLL';
+    state.diceRoll = null;
+    updateUI();
+
+    if (getActivePlayer().isBot) {
+      setTimeout(onDiceClick, 750);
+    }
+  }
+
+  // --- Tactical Bot Evaluation Engine ---
+  function botTacticalDecision() {
+    const validMoves = state.selectableTokenIds;
+    if (!validMoves.length) return;
+
+    const activePlayer = getActivePlayer();
+    const candidateTokens = activePlayer.tokens.filter(t => validMoves.includes(t.id));
+    const roll = state.diceRoll;
+
+    function getGlobalIndex(color, step) {
+      if (step < 0 || step > 50) return null;
+      return (step + COLOR_CONFIG[color].offset) % 52;
+    }
+
+    function isUnderThreat(globalIdx) {
+      if (globalIdx === null || SAFE_TRACK_INDICES.has(globalIdx)) return false;
+      for (const p of state.players) {
+        if (p.color === activePlayer.color || p.hasFinished) continue;
+        for (const opp of p.tokens) {
+          if (opp.step >= 0 && opp.step <= 50) {
+            const oppGlobal = getGlobalIndex(opp.color, opp.step);
+            const dist = (globalIdx - oppGlobal + 52) % 52;
+            if (dist >= 1 && dist <= 6) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    let bestScore = -Infinity;
+    let bestTokenId = candidateTokens[0].id;
+
+    for (const token of candidateTokens) {
+      let score = 0;
+      const curStep = token.step;
+      const targetStep = curStep === -1 ? 0 : curStep + roll;
+      const curGlobal = getGlobalIndex(token.color, curStep);
+      const targetGlobal = getGlobalIndex(token.color, targetStep);
+
+      if (curStep === -1 && targetStep === 0) {
+        const tokensOnField = activePlayer.tokens.filter(t => t.step >= 0 && t.step < FINAL_HOME_STEP).length;
+        score += 550;
+        if (tokensOnField <= 1) score += 250;
+        if (tokensOnField >= 3) score -= 120;
+      }
+
+      if (targetStep >= 0 && targetStep <= 50 && targetGlobal !== null) {
+        if (!SAFE_TRACK_INDICES.has(targetGlobal)) {
+          for (const p of state.players) {
+            if (p.color === activePlayer.color || p.hasFinished) continue;
+            for (const opp of p.tokens) {
+              if (opp.step >= 0 && opp.step <= 50) {
+                const oppGlobal = getGlobalIndex(opp.color, opp.step);
+                if (oppGlobal === targetGlobal) {
+                  score += 1200;
+                  if (opp.step > 30) score += 300;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (targetStep === FINAL_HOME_STEP) {
+        score += 950;
+      }
+
+      if (curStep <= 50 && targetStep > 50) {
+        score += 450;
+      }
+
+      if (curStep >= 0 && curStep <= 50 && isUnderThreat(curGlobal)) {
+        score += 750;
+      }
+
+      if (targetStep >= 0 && targetStep <= 50 && isUnderThreat(targetGlobal)) {
+        score -= 600;
+      }
+
+      if (targetGlobal !== null && SAFE_TRACK_INDICES.has(targetGlobal)) {
+        score += 320;
+      }
+
+      if (targetStep >= 0 && targetStep <= 50 && targetGlobal !== null) {
+        for (const p of state.players) {
+          if (p.color === activePlayer.color || p.hasFinished) continue;
+          for (const opp of p.tokens) {
+            if (opp.step >= 0 && opp.step <= 50) {
+              const oppGlobal = getGlobalIndex(opp.color, opp.step);
+              if (!SAFE_TRACK_INDICES.has(oppGlobal)) {
+                const huntDist = (oppGlobal - targetGlobal + 52) % 52;
+                if (huntDist >= 1 && huntDist <= 6) {
+                  score += 160;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      score += targetStep * 2;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTokenId = token.id;
+      }
+    }
+
+    applyTokenMove(bestTokenId);
+  }
+
+  function showFinalScoreboard() {
+    state.phase = 'GAME_OVER';
+    isGameActive = false;
+    turnTimer.stop();
+
+    const podiumList = document.getElementById('podiumList');
+    podiumList.innerHTML = '';
+
+    state.finishedRankings.forEach((player, idx) => {
+      const row = document.createElement('div');
+      row.className = 'podium-item';
+      const rankClass = `rank-${idx + 1}`;
+      row.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="podium-rank ${rankClass}">#${idx + 1}</span>
+          <div style="width: 12px; height: 12px; border-radius: 50%; background: ${COLOR_CONFIG[player.color].hex};"></div>
+          <span>${player.name}</span>
+        </div>
+        <span style="font-size: 0.85rem; color: #94a3b8;">${idx === 0 ? 'WINNER 🥇' : idx === 1 ? 'RUNNER UP 🥈' : 'FINISHED'}</span>
+      `;
+      podiumList.appendChild(row);
+    });
+
+    document.getElementById('scoreboardModal').classList.remove('hidden');
+  }
+
+  function updateUI() {
+    const cur = getActivePlayer();
+    turnDot.style.background = COLOR_CONFIG[cur.color].hex;
+    turnText.innerText = `${cur.name} (${cur.color})`;
+
+    const canRoll = !cur.isBot && state.phase === 'ROLL' && isMyTurnOnline();
+    diceScene.style.cursor = canRoll ? 'pointer' : 'not-allowed';
+    diceScene.style.opacity = canRoll || cur.isBot ? '1' : '0.6';
+
+    if (canRoll) {
+      statusMsg.innerText = 'Your turn! Tap dice.';
+      turnTimer.start();
+    } else if (selectedMode === 'ONLINE' && !isMyTurnOnline()) {
+      statusMsg.innerText = `${cur.name}'s turn...`;
+      turnTimer.stop();
+    } else if (cur.isBot) {
+      turnTimer.stop();
+    }
+  }
+
+  // --- Board & Token Rendering ---
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const diceScene = document.getElementById('diceScene');
+  const turnDot = document.getElementById('turnDot');
+  const turnText = document.getElementById('turnText');
+  const statusMsg = document.getElementById('statusMsg');
+  const modeBadge = document.getElementById('modeBadge');
+  const roomBadge = document.getElementById('roomBadge');
+  const roomCodeText = document.getElementById('roomCodeText');
+
+  function drawStar(ctx, cx, cy, spikes = 5, outerRadius = 14, innerRadius = 7, fillColor = '#475569') {
+    let rot = (Math.PI / 2) * 3;
+    let x = cx;
+    let y = cy;
+    const step = Math.PI / spikes;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+      x = cx + Math.cos(rot) * outerRadius;
+      y = cy + Math.sin(rot) * outerRadius;
+      ctx.lineTo(x, y);
+      rot += step;
+      x = cx + Math.cos(rot) * innerRadius;
+      y = cy + Math.sin(rot) * innerRadius;
+      ctx.lineTo(x, y);
+      rot += step;
+    }
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBoard() {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+
+    const quadrants = [
+      { color: COLOR_CONFIG.RED.hex,    x: 0, y: 0 },
+      { color: COLOR_CONFIG.GREEN.hex,  x: 9 * CELL_SIZE, y: 0 },
+      { color: COLOR_CONFIG.YELLOW.hex, x: 9 * CELL_SIZE, y: 9 * CELL_SIZE },
+      { color: COLOR_CONFIG.BLUE.hex,   x: 0, y: 9 * CELL_SIZE }
+    ];
+
+    quadrants.forEach(q => {
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x, q.y, 6 * CELL_SIZE, 6 * CELL_SIZE);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(q.x + CELL_SIZE, q.y + CELL_SIZE, 4 * CELL_SIZE, 4 * CELL_SIZE);
+    });
+
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 15; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * CELL_SIZE, 0);
+      ctx.lineTo(i * CELL_SIZE, BOARD_SIZE);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * CELL_SIZE);
+      ctx.lineTo(BOARD_SIZE, i * CELL_SIZE);
+      ctx.stroke();
+    }
+
+    function fillCell(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    }
+
+    fillCell(1, 6, COLOR_CONFIG.RED.hex);
+    for (let x = 1; x <= 5; x++) fillCell(x, 7, COLOR_CONFIG.RED.hex);
+
+    fillCell(8, 1, COLOR_CONFIG.GREEN.hex);
+    for (let y = 1; y <= 5; y++) fillCell(7, y, COLOR_CONFIG.GREEN.hex);
+
+    fillCell(13, 8, COLOR_CONFIG.YELLOW.hex);
+    for (let x = 9; x <= 13; x++) fillCell(x, 7, COLOR_CONFIG.YELLOW.hex);
+
+    fillCell(6, 13, COLOR_CONFIG.BLUE.hex);
+    for (let y = 9; y <= 13; y++) fillCell(7, y, COLOR_CONFIG.BLUE.hex);
+
+    const centerPoints = [
+      { color: COLOR_CONFIG.RED.hex,    pts: [[6,6],[7.5,7.5],[6,9]] },
+      { color: COLOR_CONFIG.GREEN.hex,  pts: [[6,6],[7.5,7.5],[9,6]] },
+      { color: COLOR_CONFIG.YELLOW.hex, pts: [[9,6],[7.5,7.5],[9,9]] },
+      { color: COLOR_CONFIG.BLUE.hex,   pts: [[6,9],[7.5,7.5],[9,9]] }
+    ];
+
+    centerPoints.forEach(tri => {
+      ctx.fillStyle = tri.color;
+      ctx.beginPath();
+      ctx.moveTo(tri.pts[0][0] * CELL_SIZE, tri.pts[0][1] * CELL_SIZE);
+      ctx.lineTo(tri.pts[1][0] * CELL_SIZE, tri.pts[1][1] * CELL_SIZE);
+      ctx.lineTo(tri.pts[2][0] * CELL_SIZE, tri.pts[2][1] * CELL_SIZE);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    SAFE_TILES.forEach(tile => {
+      const cx = (tile.x + 0.5) * CELL_SIZE;
+      const cy = (tile.y + 0.5) * CELL_SIZE;
+      drawStar(ctx, cx, cy, 5, CELL_SIZE * 0.28, CELL_SIZE * 0.14, tile.fill);
+    });
+
+    ctx.save();
+    ctx.font = "900 13px system-ui, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.fillText("HOME", 6.6 * CELL_SIZE, 7.5 * CELL_SIZE);
+    ctx.fillText("HOME", 7.5 * CELL_SIZE, 6.6 * CELL_SIZE);
+    ctx.fillText("HOME", 8.4 * CELL_SIZE, 7.5 * CELL_SIZE);
+    ctx.fillText("HOME", 7.5 * CELL_SIZE, 8.4 * CELL_SIZE);
+    ctx.restore();
+  }
+
+  function drawSingleToken(x, y, radius, fillColor, scale = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, -radius * 0.25, radius * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawTokens(now) {
+    const animatedTransform = animator.update(now);
+
+    const tileOccupants = new Map();
+    state.players.forEach(player => {
+      player.tokens.forEach(token => {
+        if (token.id === state.animatingToken) return;
+        const key = getTileKey(token);
+        if (!tileOccupants.has(key)) tileOccupants.set(key, []);
+        tileOccupants.get(key).push(token);
+      });
+    });
+
+    tileOccupants.forEach(tokensOnTile => {
+      const totalCount = tokensOnTile.length;
+      tokensOnTile.forEach((token, index) => {
+        let basePos = getPixelCoordinate(token);
+        let posX = basePos.x;
+        let posY = basePos.y;
+
+        let tokenRadius = 18;
+        if (totalCount > 1 && token.step !== -1) {
+          tokenRadius = totalCount >= 4 ? 11 : 13;
+          const spreadRadius = CELL_SIZE * 0.24;
+          const angle = (2 * Math.PI * index) / totalCount - Math.PI / 2;
+          posX += Math.cos(angle) * spreadRadius;
+          posY += Math.sin(angle) * spreadRadius;
+        }
+
+        const isSelectable = state.selectableTokenIds.includes(token.id) && isMyTurnOnline();
+        if (isSelectable) {
+          ctx.beginPath();
+          ctx.arc(posX, posY, tokenRadius + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3 + Math.sin(now / 150) * 1.5;
+          ctx.stroke();
+        }
+
+        drawSingleToken(posX, posY, tokenRadius, COLOR_CONFIG[token.color].hex, 1);
+      });
+    });
+
+    if (state.animatingToken && animatedTransform) {
+      let animColor = '#ffffff';
+      for (const p of state.players) {
+        const found = p.tokens.find(t => t.id === state.animatingToken);
+        if (found) { animColor = COLOR_CONFIG[found.color].hex; break; }
+      }
+
+      const hopScale = 1 + (animatedTransform.arc / 40);
+      drawSingleToken(
+        animatedTransform.x,
+        animatedTransform.y,
+        18,
+        animColor,
+        hopScale
+      );
+    }
+  }
+
+  // --- Click & Input Detection ---
+  canvas.addEventListener('click', e => {
+    if (state.phase !== 'MOVE' || getActivePlayer().isBot || !isMyTurnOnline()) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scale = BOARD_SIZE / rect.width;
+    const clickX = (e.clientX - rect.left) * scale;
+    const clickY = (e.clientY - rect.top) * scale;
+
+    const activePlayer = getActivePlayer();
+    for (const tokenId of state.selectableTokenIds) {
+      const token = activePlayer.tokens.find(t => t.id === tokenId);
+      const key = getTileKey(token);
+
+      let allOccupants = [];
+      state.players.forEach(p => {
+        p.tokens.forEach(t => {
+          if (t.id !== state.animatingToken && getTileKey(t) === key) {
+            allOccupants.push(t);
+          }
+        });
+      });
+
+      const index = allOccupants.findIndex(t => t.id === tokenId);
+      const basePos = getPixelCoordinate(token);
+      let posX = basePos.x;
+      let posY = basePos.y;
+
+      if (allOccupants.length > 1 && token.step !== -1) {
+        const spreadRadius = CELL_SIZE * 0.24;
+        const angle = (2 * Math.PI * index) / allOccupants.length - Math.PI / 2;
+        posX += Math.cos(angle) * spreadRadius;
+        posY += Math.sin(angle) * spreadRadius;
+      }
+
+      const clickRadius = allOccupants.length > 1 ? 20 : 30;
+      const dist = Math.hypot(clickX - posX, clickY - posY);
+
+      if (dist < clickRadius) {
+        selectToken(tokenId);
+        break;
+      }
+    }
+  });
+
+  diceScene.addEventListener('click', onDiceClick);
+
+  roomBadge.addEventListener('click', () => {
+    if (onlineRoomCode) {
+      navigator.clipboard.writeText(onlineRoomCode);
+      statusMsg.innerText = 'Room code copied!';
+    }
+  });
+
+  // --- Modal Navigation Handlers ---
+  const setupModal = document.getElementById('setupModal');
+  const btnOpenSetup = document.getElementById('btnOpenSetup');
+  const playerNameInput = document.getElementById('playerNameInput');
+  const colorSwatches = document.querySelectorAll('.color-swatch');
+
+  const modeBots = document.getElementById('modeBots');
+  const modePassPlay = document.getElementById('modePassPlay');
+  const modeOnline = document.getElementById('modeOnline');
+
+  const playerCountSection = document.getElementById('playerCountSection');
+  const countButtons = playerCountSection.querySelectorAll('.toggle-btn');
+
+  const onlineSection = document.getElementById('onlineSection');
+  const btnSubCreate = document.getElementById('btnSubCreate');
+  const btnSubJoin = document.getElementById('btnSubJoin');
+  const createSubView = document.getElementById('createSubView');
+  const joinSubView = document.getElementById('joinSubView');
+  const generatedCodeDisplay = document.getElementById('generatedCodeDisplay');
+  const joinCodeInput = document.getElementById('joinCodeInput');
+  const joinErrorHelper = document.getElementById('joinErrorHelper');
+  const btnStartGame = document.getElementById('btnStartGame');
+  const btnPlayAgain = document.getElementById('btnPlayAgain');
+
+  const waitingLobbyModal = document.getElementById('waitingLobbyModal');
+  const lobbyRoomCode = document.getElementById('lobbyRoomCode');
+  const lobbySlots = document.getElementById('lobbySlots');
+  const lobbyStatusText = document.getElementById('lobbyStatusText');
+  const btnLobbyStart = document.getElementById('btnLobbyStart');
+  const btnLeaveLobby = document.getElementById('btnLeaveLobby');
+
+  const rejoinRequestModal = document.getElementById('rejoinRequestModal');
+  const btnAcceptRejoin = document.getElementById('btnAcceptRejoin');
+  const btnRejectRejoin = document.getElementById('btnRejectRejoin');
+  const rejoiningStatusModal = document.getElementById('rejoiningStatusModal');
+  const rejoinStatusMsg = document.getElementById('rejoinStatusMsg');
+  const btnCancelRejoin = document.getElementById('btnCancelRejoin');
+
+  btnOpenSetup.addEventListener('click', () => {
+    setupModal.classList.remove('hidden');
+  });
+
+  colorSwatches.forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      colorSwatches.forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      myCustomColor = swatch.dataset.color;
+    });
+  });
+
+  modeBots.addEventListener('click', () => {
+    selectedMode = 'BOTS';
+    modeBots.classList.add('active');
+    modePassPlay.classList.remove('active');
+    modeOnline.classList.remove('active');
+    playerCountSection.style.display = 'block';
+    onlineSection.style.display = 'none';
+    btnStartGame.innerText = 'Launch Match';
+  });
+
+  modePassPlay.addEventListener('click', () => {
+    selectedMode = 'PASS_PLAY';
+    modePassPlay.classList.add('active');
+    modeBots.classList.remove('active');
+    modeOnline.classList.remove('active');
+    playerCountSection.style.display = 'block';
+    onlineSection.style.display = 'none';
+    btnStartGame.innerText = 'Launch Match';
+  });
+
+  modeOnline.addEventListener('click', () => {
+    selectedMode = 'ONLINE';
+    activePlayerCount = 2;
+    modeOnline.classList.add('active');
+    modeBots.classList.remove('active');
+    modePassPlay.classList.remove('active');
+    playerCountSection.style.display = 'none';
+    onlineSection.style.display = 'flex';
+    btnStartGame.innerText = btnSubCreate.classList.contains('active') ? 'Create & Enter Lobby' : 'Join / Rejoin Room';
+
+    if (btnSubCreate.classList.contains('active')) {
+      prepareHostRoom();
+    }
+  });
+
+  countButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      countButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activePlayerCount = parseInt(btn.dataset.count, 10);
+    });
+  });
+
+  btnSubCreate.addEventListener('click', () => {
+    btnSubCreate.classList.add('active');
+    btnSubJoin.classList.remove('active');
+    createSubView.style.display = 'block';
+    joinSubView.style.display = 'none';
+    btnStartGame.innerText = 'Create & Enter Lobby';
+    prepareHostRoom();
+  });
+
+  btnSubJoin.addEventListener('click', () => {
+    btnSubJoin.classList.add('active');
+    btnSubCreate.classList.remove('active');
+    createSubView.style.display = 'none';
+    joinSubView.style.display = 'block';
+    btnStartGame.innerText = 'Join / Rejoin Room';
+  });
+
+  function prepareHostRoom() {
+    isHost = true;
+    onlineRoomCode = generateNumericCode();
+    generatedCodeDisplay.innerText = onlineRoomCode;
+    initPeer(`ludo-numeric-${onlineRoomCode}`, id => {
+      console.log('Hosting room with Peer ID:', id);
+    });
+  }
+
+  generatedCodeDisplay.addEventListener('click', () => {
+    if (onlineRoomCode) {
+      navigator.clipboard.writeText(onlineRoomCode);
+      alert('Room code copied: ' + onlineRoomCode);
+    }
+  });
+
+  function renderLobbyUI() {
+    lobbyRoomCode.innerText = onlineRoomCode;
+    lobbySlots.innerHTML = '';
+
+    for (let i = 0; i < 2; i++) {
+      const p = lobbyPlayers[i];
+      const slot = document.createElement('div');
+      if (p) {
+        slot.className = 'lobby-slot';
+        slot.innerHTML = `
+          <div class="lobby-player-info">
+            <div class="lobby-dot" style="background: ${COLOR_CONFIG[p.color].hex};"></div>
+            <span>${p.name}</span>
+          </div>
+          <span class="lobby-tag">${p.isHost ? 'Host' : 'Ready'}</span>
+        `;
+      } else {
+        slot.className = 'lobby-slot empty';
+        slot.innerText = 'Waiting for friend...';
+      }
+      lobbySlots.appendChild(slot);
+    }
+
+    if (lobbyPlayers.length >= 2) {
+      lobbyStatusText.innerText = isHost ? 'Friend connected! You can start the match.' : 'Waiting for host to start the game...';
+      btnLobbyStart.disabled = !isHost;
+      btnLobbyStart.innerText = isHost ? 'Start Match' : 'Waiting for Host...';
+    } else {
+      lobbyStatusText.innerText = 'Share code with your friend to connect...';
+      btnLobbyStart.disabled = true;
+      btnLobbyStart.innerText = isHost ? 'Waiting for Friend...' : 'Connecting...';
+    }
+  }
+
+  btnStartGame.addEventListener('click', () => {
+    myCustomName = playerNameInput.value.trim() || 'Player 1';
+
+    if (selectedMode === 'ONLINE') {
+      if (btnSubCreate.classList.contains('active')) {
+        isHost = true;
+        isGameActive = false;
+        lobbyPlayers = [{ name: myCustomName, color: myCustomColor, isHost: true }];
+        setupModal.classList.add('hidden');
+        waitingLobbyModal.classList.remove('hidden');
+        renderLobbyUI();
+      } else {
+        const code = joinCodeInput.value.trim();
+        if (code.length !== 6 || !/^\d+$/.test(code)) {
+          joinErrorHelper.innerText = 'Please enter a valid 6-digit numeric code.';
+          return;
+        }
+        isHost = false;
+        onlineRoomCode = code;
+
+        initPeer(null, () => {
+          const hostId = `ludo-numeric-${code}`;
+          connection = peer.connect(hostId);
+          setupConnListeners(connection);
+
+          setupModal.classList.add('hidden');
+          rejoinStatusMsg.innerText = 'Contacting room host...';
+          rejoiningStatusModal.classList.remove('hidden');
+
+          connection.on('open', () => {
+            if (!isGameActive) {
+              rejoiningStatusModal.classList.add('hidden');
+              waitingLobbyModal.classList.remove('hidden');
+              lobbyPlayers = [{ name: myCustomName, color: myCustomColor, isHost: false }];
+              renderLobbyUI();
+            }
+          });
+        });
+      }
+    } else {
+      isGameActive = true;
+      setupModal.classList.add('hidden');
+      initMatch();
+    }
+  });
+
+  btnLobbyStart.addEventListener('click', () => {
+    if (isHost && lobbyPlayers.length >= 2) {
+      isGameActive = true;
+      broadcastAction({ type: 'START_MATCH' });
+      waitingLobbyModal.classList.add('hidden');
+      initMatch();
+    }
+  });
+
+  btnLeaveLobby.addEventListener('click', () => {
+    if (connection) { connection.close(); connection = null; }
+    if (peer) { peer.destroy(); peer = null; }
+    waitingLobbyModal.classList.add('hidden');
+    setupModal.classList.remove('hidden');
+  });
+
+  btnAcceptRejoin.addEventListener('click', () => {
+    rejoinRequestModal.classList.add('hidden');
+    if (pendingRejoinData) {
+      const snapshot = createGameStateSnapshot();
+      broadcastAction({
+        type: 'REJOIN_ACCEPTED',
+        gameState: snapshot
+      });
+      statusMsg.innerText = `${pendingRejoinData.name} rejoined!`;
+      pendingRejoinData = null;
+      sfx.star();
+    }
+  });
+
+  btnRejectRejoin.addEventListener('click', () => {
+    rejoinRequestModal.classList.add('hidden');
+    broadcastAction({ type: 'REJOIN_REJECTED' });
+    pendingRejoinData = null;
+  });
+
+  btnCancelRejoin.addEventListener('click', () => {
+    if (connection) { connection.close(); connection = null; }
+    rejoiningStatusModal.classList.add('hidden');
+    setupModal.classList.remove('hidden');
+  });
+
+  btnPlayAgain.addEventListener('click', () => {
+    document.getElementById('scoreboardModal').classList.add('hidden');
+    initMatch();
+  });
+
+  // --- Main Animation Loop ---
+  function loop(timestamp) {
+    drawBoard();
+    drawTokens(timestamp);
+
+    confetti.update();
+    confetti.draw(ctx);
+
+    requestAnimationFrame(loop);
+  }
+
+  initMatch();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
